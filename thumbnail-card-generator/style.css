@@ -1,195 +1,136 @@
-* {
-    box-sizing: border-box;
-}
-
-:root {
-    color-scheme: dark;
-    font-family: Arial, Helvetica, sans-serif;
-}
-
 body {
-    margin: 0;
-    background: #111;
-    color: #f1f1f1;
+  max-width: 1100px;
+  margin: 20px auto;
+  padding: 0 15px;
+  font-family: Arial, sans-serif;
+  background: #0c0c0c;
+  color: #eee;
 }
 
 main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 42px 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
 }
 
-header {
-    margin-bottom: 30px;
+h1, .sub {
+  width: 100%;
+  margin: 0;
 }
 
 h1 {
-    font-size: 25px;
-    font-weight: 600;
-    margin: 0 0 8px;
+  color: #f49ac1;
 }
 
-header p,
-#status {
-    color: #aaa;
-    font-size: 14px;
+.sub, .hint {
+  color: #aaa;
+  font-size: 14px;
 }
 
-.workspace {
-    display: grid;
-    grid-template-columns: 330px minmax(0, 1fr);
-    gap: 54px;
-    align-items: start;
+.hint.err {
+  color: #ff8080;
 }
 
-.controls {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
+/* sidebar */
+.panel {
+  width: 320px;
+  flex-shrink: 0;
+  background: #171717;
+  border: 1px solid #000000;
+  padding: 15px;
+}
+
+/* preview */
+.stage {
+  flex: 1;
+  min-width: 300px;
+  background: #171717;
+  padding: 15px;
+  text-align: center;
+  position: sticky;
+  top: 20px;
 }
 
 label {
-    font-size: 13px;
-    color: #ddd;
-    margin-top: 10px;
+  display: block;
+  margin-bottom: 12px;
 }
 
-input {
+input[type=text], select {
+    display: block;
     width: 100%;
-    background: #1d1d1d;
-    border: 1px solid #393939;
-    border-radius: 5px;
-    padding: 11px;
+    box-sizing: border-box;
+    padding: 7px;
+    margin-top: 4px;
+    background: #1a1a1a;
     color: #eee;
-    font: 14px Arial;
+    border: 1px solid #555;
+    font-size: 15px;
 }
 
-input[type="file"] {
-    padding: 8px;
-    font-size: 12px;
+input[type=text]:focus, select:focus {
+  outline: none;
+  border-color: #f49ac1;
 }
 
-.url-row {
-    display: flex;
-    gap: 8px;
+.drop {
+  border: 1px dashed #777;
+  padding: 10px;
+  margin-bottom: 12px;
+  text-align: center;
+  color: #aaa;
+  cursor: pointer;
 }
 
-.url-row input {
-    min-width: 0;
+.drop:hover, .drop.over {
+  border-color: #f49ac1;
+  color: #eee;
+}
+
+.drop.has {
+  border-style: solid;
+  color: #eee;
 }
 
 button {
-    border: 0;
-    border-radius: 5px;
-    background: #f04b91;
-    color: white;
-    padding: 0 16px;
-    font-weight: 600;
-    cursor: pointer;
+  padding: 8px 16px;
+  background: #444;
+  color: #eee;
+  border: 1px solid #666;
+  font-size: 15px;
+  cursor: pointer;
 }
 
 button:hover {
-    background: #ff66a6;
+  border-color: #f49ac1;
 }
 
-.download {
-    height: 42px;
-    margin-top: 20px;
+button.primary {
+  background: #f49ac1;
+  border-color: #f49ac1;
+  font-weight: bold;
 }
 
-#status {
-    min-height: 18px;
-    margin: 0;
-    font-size: 12px;
+.status {
+  color: #aaa;
+  font-size: 14px;
 }
 
-.preview-area {
-    min-width: 0;
-    padding-top: 8px;
+img {
+  max-width: 100%;
 }
 
-.preview-label {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 13px;
+.sr {
+  display: none;
 }
 
-.listing {
-    width: min(100%, 520px);
-}
-
-.thumbnail {
+/* phones: sidebar goes on top */
+@media (max-width: 700px) {
+  .panel {
     width: 100%;
-    aspect-ratio: 16 / 9;
-    background: #242424;
-    overflow: hidden;
-    border-radius: 10px;
-}
-
-.thumbnail img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.details {
-    display: flex;
-    gap: 12px;
-    padding-top: 12px;
-    align-items: flex-start;
-}
-
-.avatar {
-    width: 36px;
-    height: 36px;
-    object-fit: cover;
-    border-radius: 50%;
-    background: #333;
-    flex: none;
-}
-
-.copy {
-    min-width: 0;
-    flex: 1;
-}
-
-.video-title {
-    font-size: 16px;
-    font-weight: 600;
-    line-height: 1.35;
-    color: #f1f1f1;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.channel,
-.views {
-    font-size: 13px;
-    color: #aaa;
-    margin-top: 5px;
-    line-height: 1.3;
-}
-
-.more {
-    font-size: 22px;
-    color: #ddd;
-    line-height: 20px;
-}
-
-@media (max-width: 760px) {
-    main {
-        padding: 28px 18px;
-    }
-
-    .workspace {
-        grid-template-columns: 1fr;
-        gap: 34px;
-    }
-
-    .preview-area {
-        padding-top: 0;
-    }
+  }
+  .stage {
+    position: static;
+  }
 }

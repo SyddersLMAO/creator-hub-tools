@@ -1,241 +1,276 @@
-const $ = id => document.getElementById(id);
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { thumb: null, avatar: null, avatarManual: false, lastId: null, timer: null };
+  var CARD_W = 620, PAD = 16, MARGIN = 40, R = 18, TR = 12, AV = 44, LH = 31, GAP = 14;
+  var FONT = 'Roboto, Arial, sans-serif';
 
-const fallbackThumb = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="#292929"/><text x="50%" y="50%" fill="#888" font-size="42" text-anchor="middle" font-family="Arial">Thumbnail preview</text></svg>'
-);
+  function ytId(s) {
+    var m = (s || '').match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
 
-const fallbackAvatar = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="#383838"/><circle cx="50" cy="38" r="19" fill="#888"/><path d="M15 100c2-25 17-37 35-37s33 12 35 37" fill="#888"/></svg>'
-);
+  function loadCors(url) {
+    return new Promise(function (resolve, reject) {
+      var im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = function () { resolve(im); };
+      im.onerror = function () { reject(new Error('image failed')); };
+      im.src = url;
+    });
+  }
 
-let thumbnail = fallbackThumb;
-let avatar = fallbackAvatar;
-
-function videoId(url) {
-    try {
-        const u = new URL(url);
-
-        if (u.hostname.includes("youtu.be")) {
-            return u.pathname.split("/").filter(Boolean)[0];
-        }
-
-        if (u.searchParams.get("v")) {
-            return u.searchParams.get("v");
-        }
-
-        const parts = u.pathname.split("/").filter(Boolean);
-        const marker = parts.findIndex(p =>
-            ["shorts", "embed", "live"].includes(p)
-        );
-
-        return marker >= 0 ? parts[marker + 1] : null;
-    } catch {
-        return null;
-    }
-}
-
-function setImage(element, src, fallback) {
-    element.onerror = () => {
-        element.onerror = null;
-        element.src = fallback;
+  function loadFile(file, cb) {
+    if (!file || !/^image\//.test(file.type)) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () { cb(im); };
+      im.src = fr.result;
     };
+    fr.readAsDataURL(file);
+  }
 
-    element.src = src;
-}
+  function setFetchStatus(msg, isErr) {
+    var el = $('fetchStatus');
+    el.textContent = msg;
+    el.className = 'hint' + (isErr ? ' err' : '');
+  }
 
-function refresh() {
-    $("previewTitle").textContent =
-        $("title").value.trim() || "Your video title";
+  // Thumbnail: full-size first, then the smaller 16:9 version (no black bars).
+  async function getThumb(id) {
+    var urls = [
+      'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg',
+      'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg'
+    ];
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var im = await loadCors(urls[i]);
+        if (im.naturalWidth > 120) return im;
+      } catch (e) { /* try next */ }
+    }
+    throw new Error('no thumbnail');
+  }
 
-    $("previewChannel").textContent =
-        $("channel").value.trim() || "Channel name";
+  async function getMeta(id) {
+    var url = 'https://www.youtube.com/oembed?format=json&url=' +
+      encodeURIComponent('https://www.youtube.com/watch?v=' + id);
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('oembed ' + r.status);
+    return r.json();
+  }
 
-    $("previewViews").textContent =
-        $("views").value.trim() || "Views · upload date";
+  // Channel avatar: YouTube doesn't expose it to browsers, so ask unavatar.io using the channel handle.
+  async function getAvatar(authorUrl) {
+    var part = (authorUrl || '').replace(/[?#].*$/, '').replace(/\/+$/, '').split('/').pop();
+    if (!part) throw new Error('no handle');
+    return loadCors('https://unavatar.io/youtube/' + encodeURIComponent(decodeURIComponent(part)) + '?fallback=false');
+  }
 
-    setImage($("previewThumbnail"), thumbnail, fallbackThumb);
-    setImage($("previewAvatar"), avatar, fallbackAvatar);
-}
+  async function autoFill(id) {
+    state.lastId = id;
+    setFetchStatus('Fetching video details…');
+    var results = await Promise.allSettled([getMeta(id), getThumb(id)]);
+    if (state.lastId !== id) return; // a newer link replaced this one
+    var meta = results[0], th = results[1], problems = [], avatarMissing = false;
 
-$("loadVideo").addEventListener("click", async () => {
-    const id = videoId($("videoUrl").value.trim());
+    if (meta.status === 'fulfilled') {
+      $('title').value = meta.value.title || '';
+      $('channel').value = meta.value.author_name || '';
+    } else {
+      problems.push('title and uploader');
+    }
+    if (meta.status === 'fulfilled' && !state.avatarManual) {
+      try {
+        state.avatar = await getAvatar(meta.value.author_url);
+        if (state.lastId !== id) return;
+        $('avDrop').classList.remove('has');
+        $('avText').textContent = 'Channel avatar (optional): click to choose an image';
+      } catch (e) {
+        if (state.lastId !== id) return;
+        state.avatar = null;
+        avatarMissing = true;
+      }
+    }
+    if (th.status === 'fulfilled') {
+      state.thumb = th.value;
+      $('drop').classList.remove('has');
+    } else {
+      problems.push('thumbnail');
+    }
 
+    if (problems.length) {
+      setFetchStatus('Couldn’t load the ' + problems.join(' or ') + '. Fill it in by hand below. The video may be private or have embedding turned off.', true);
+    } else {
+      setFetchStatus(avatarMissing ? 'Done, but the channel avatar didn’t load. You can upload one below.' : 'Done. Edit anything you like.');
+    }
+    draw();
+  }
+
+  function onLink() {
+    clearTimeout(state.timer);
+    var id = ytId($('link').value);
     if (!id) {
-        $("status").textContent = "Enter a valid YouTube video link.";
-        return;
+      setFetchStatus($('link').value ? 'That doesn’t look like a YouTube link.' : 'Waiting for a link.', !!$('link').value);
+      return;
     }
+    state.timer = setTimeout(function () { autoFill(id); }, 250);
+  }
 
-    $("status").textContent = "Loading video details…";
+  function rr(c, x, y, w, h, r) {
+    c.beginPath(); c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
 
-    thumbnail = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  function wrap(c, text, maxW, maxLines) {
+    var words = text.trim().split(/\s+/), lines = [], cur = '';
+    for (var i = 0; i < words.length; i++) {
+      var t = cur ? cur + ' ' + words[i] : words[i];
+      if (c.measureText(t).width <= maxW) cur = t;
+      else { if (cur) lines.push(cur); cur = words[i]; }
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) {
+      var last = lines.slice(maxLines - 1).join(' ');
+      lines = lines.slice(0, maxLines - 1);
+      while (last.length > 1 && c.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+      lines.push(last.trim() + '…');
+    }
+    return lines.length ? lines : [''];
+  }
 
-    setImage($("previewThumbnail"), thumbnail, fallbackThumb);
+  var canvas = null;
 
+  function draw() {
+    var S = parseFloat($('scale').value) || 2;
+    var dark = $('theme').value === 'dark';
+    var shadow = $('bgmode').value === 'shadow';
+    var m = shadow ? MARGIN : 0;
+    var bg = dark ? '#0f0f0f' : '#ffffff', tx = dark ? '#f1f1f1' : '#0f0f0f', sub = dark ? '#aaaaaa' : '#606060';
+
+    var innerW = CARD_W - PAD * 2, thumbH = Math.round(innerW * 9 / 16);
+    var maxW = CARD_W - PAD - (PAD + AV + GAP);
+    var channel = $('channel').value || '';
+
+    var cv = document.createElement('canvas'), c = cv.getContext('2d');
+    c.font = '700 24px ' + FONT;
+    var lines = wrap(c, $('title').value || ' ', maxW, 2);
+    var headH = Math.max(AV + 4, lines.length * LH + 8 + 22);
+    var cardH = PAD + thumbH + 16 + headH + PAD;
+    var W = CARD_W + m * 2, H = cardH + m * 2;
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+    c.scale(S, S);
+
+    // card
+    c.save();
+    if (shadow) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 28; c.shadowOffsetY = 10; }
+    rr(c, m, m, CARD_W, cardH, R); c.fillStyle = bg; c.fill();
+    c.restore();
+    if (!dark) { rr(c, m + .5, m + .5, CARD_W - 1, cardH - 1, R); c.strokeStyle = 'rgba(0,0,0,.08)'; c.lineWidth = 1; c.stroke(); }
+
+    // thumbnail
+    var tx0 = m + PAD, ty0 = m + PAD, th = state.thumb;
+    c.save(); rr(c, tx0, ty0, innerW, thumbH, TR); c.clip();
+    if (th) {
+      var ir = th.width / th.height, br = innerW / thumbH, sw, sh, sx, sy;
+      if (ir > br) { sh = th.height; sw = sh * br; sx = (th.width - sw) / 2; sy = 0; }
+      else { sw = th.width; sh = sw / br; sx = 0; sy = (th.height - sh) / 2; }
+      c.drawImage(th, sx, sy, sw, sh, tx0, ty0, innerW, thumbH);
+    } else {
+      c.fillStyle = dark ? '#2a2a2a' : '#d9d9d9'; c.fillRect(tx0, ty0, innerW, thumbH);
+      c.fillStyle = '#777'; c.font = '500 20px ' + FONT; c.textAlign = 'center';
+      c.fillText('Paste a link to load the thumbnail', tx0 + innerW / 2, ty0 + thumbH / 2 + 7); c.textAlign = 'left';
+    }
+    c.restore();
+
+    // avatar
+    var textTop = ty0 + thumbH + 16, avX = tx0, avY = textTop + 2;
+    c.save(); c.beginPath(); c.arc(avX + AV / 2, avY + AV / 2, AV / 2, 0, Math.PI * 2); c.clip();
+    if (state.avatar) {
+      var a = state.avatar, s = Math.min(a.width, a.height);
+      c.drawImage(a, (a.width - s) / 2, (a.height - s) / 2, s, s, avX, avY, AV, AV);
+    } else {
+      c.fillStyle = dark ? '#3a3a3a' : '#d0d0d0'; c.fillRect(avX, avY, AV, AV);
+      c.fillStyle = dark ? '#cfcfcf' : '#555'; c.font = '500 20px ' + FONT;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText((channel.trim()[0] || '?').toUpperCase(), avX + AV / 2, avY + AV / 2 + 1);
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    }
+    c.restore();
+
+    // title + uploader
+    var textLeft = tx0 + AV + GAP;
+    c.font = '700 24px ' + FONT; c.fillStyle = tx;
+    for (var i = 0; i < lines.length; i++) c.fillText(lines[i], textLeft, textTop + 22 + i * LH);
+    c.font = '400 18px ' + FONT; c.fillStyle = sub;
+    var ch = channel;
+    while (ch.length > 1 && c.measureText(ch).width > maxW) ch = ch.slice(0, -2) + '…';
+    c.fillText(ch, textLeft, textTop + 22 + lines.length * LH + 2);
+
+    canvas = cv;
     try {
-        const response = await fetch(
-            `https://www.youtube.com/oembed?url=${encodeURIComponent(
-                "https://www.youtube.com/watch?v=" + id
-            )}&format=json`
-        );
-
-        if (!response.ok) {
-            throw new Error("Metadata unavailable");
-        }
-
-        const data = await response.json();
-
-        $("title").value = data.title || "";
-        $("channel").value = data.author_name || "";
-
-        if (data.thumbnail_url) {
-            thumbnail = data.thumbnail_url;
-        }
-
-        refresh();
-
-        $("status").textContent =
-            "Video loaded. You can change any field.";
-    } catch {
-        refresh();
-
-        $("status").textContent =
-            "Thumbnail loaded. Enter the title and channel manually.";
+      $('out').src = cv.toDataURL('image/png');
+      $('out').width = Math.min(W, 640);
+      $('status').textContent = '';
+    } catch (e) {
+      $('status').textContent = 'The browser blocked that thumbnail. Drop the image in by hand instead.';
+      state.thumb = null; draw();
     }
-});
+  }
 
-$("thumbnailUpload").addEventListener("change", event => {
-    const file = event.target.files[0];
+  function slug(s) { return (s || 'video').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'video'; }
 
-    if (!file) return;
+  $('dlBtn').addEventListener('click', function () {
+    if (!canvas) return;
+    canvas.toBlob(function (b) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'card-' + slug($('title').value) + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }, 'image/png');
+  });
 
-    thumbnail = URL.createObjectURL(file);
-    refresh();
-});
+  $('copyBtn').addEventListener('click', function () {
+    var st = $('status');
+    if (!canvas || !navigator.clipboard || !window.ClipboardItem) { st.textContent = 'Copy isn’t supported here. Use Download PNG.'; return; }
+    canvas.toBlob(function (b) {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': b })])
+        .then(function () { st.textContent = 'Copied. Paste it into your editor.'; })
+        .catch(function () { st.textContent = 'Copy was blocked. Use Download PNG.'; });
+    }, 'image/png');
+  });
 
-$("avatarUpload").addEventListener("change", event => {
-    const file = event.target.files[0];
+  // manual thumbnail fallback
+  var drop = $('drop'), tf = $('thumbFile');
+  function setThumb(f) { loadFile(f, function (im) { state.thumb = im; drop.classList.add('has'); $('dropText').textContent = 'Thumbnail replaced. Drop another to swap it.'; draw(); }); }
+  drop.addEventListener('click', function () { tf.click(); });
+  drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tf.click(); } });
+  tf.addEventListener('change', function () { setThumb(tf.files[0]); });
+  ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function (e) { setThumb(e.dataTransfer.files[0]); });
+  document.addEventListener('paste', function (e) {
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    for (var i = 0; i < items.length; i++) if (items[i].type.indexOf('image/') === 0) { setThumb(items[i].getAsFile()); break; }
+  });
 
-    if (!file) return;
+  // avatar
+  var avd = $('avDrop'), af = $('avFile');
+  avd.addEventListener('click', function () { af.click(); });
+  avd.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); af.click(); } });
+  af.addEventListener('change', function () {
+    loadFile(af.files[0], function (im) { state.avatar = im; state.avatarManual = true; avd.classList.add('has'); $('avText').textContent = 'Avatar added. Click to replace.'; draw(); });
+  });
 
-    avatar = URL.createObjectURL(file);
-    refresh();
-});
+  $('link').addEventListener('input', onLink);
+  $('link').addEventListener('paste', function () { setTimeout(onLink, 0); });
+  ['title', 'channel'].forEach(function (id) { $(id).addEventListener('input', draw); });
+  ['theme', 'bgmode', 'scale'].forEach(function (id) { $(id).addEventListener('change', draw); });
 
-["title", "channel", "views"].forEach(id => {
-    $(id).addEventListener("input", refresh);
-});
-
-function loadImage(src) {
-    return new Promise((resolve, reject) => {
-        const image = new Image();
-
-        image.crossOrigin = "anonymous";
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = src;
-    });
-}
-
-function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
-    const words = text.split(/\s+/);
-    const lines = [];
-    let line = "";
-
-    for (const word of words) {
-        const test = line ? line + " " + word : word;
-
-        if (ctx.measureText(test).width > maxWidth && line) {
-            lines.push(line);
-            line = word;
-        } else {
-            line = test;
-        }
-    }
-
-    if (line) lines.push(line);
-
-    lines.slice(0, maxLines).forEach((value, index) => {
-        if (index === maxLines - 1 && lines.length > maxLines) {
-            value = value.replace(/\s+\S*$/, "") + "…";
-        }
-
-        ctx.fillText(value, x, y + index * lineHeight);
-    });
-}
-
-$("download").addEventListener("click", async () => {
-    $("status").textContent = "Preparing image…";
-
-    const canvas = $("canvas");
-    const ctx = canvas.getContext("2d");
-
-    ctx.fillStyle = "#0f0f0f";
-    ctx.fillRect(0, 0, 1280, 920);
-
-    try {
-        const image = await loadImage(thumbnail);
-
-        const scale = Math.max(
-            1280 / image.width,
-            720 / image.height
-        );
-
-        const width = image.width * scale;
-        const height = image.height * scale;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(0, 0, 1280, 720, 20);
-        ctx.clip();
-
-        ctx.drawImage(
-            image,
-            (1280 - width) / 2,
-            (720 - height) / 2,
-            width,
-            height
-        );
-
-        ctx.restore();
-
-        const avatarImage = await loadImage(avatar).catch(() => null);
-
-        if (avatarImage) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(52, 790, 34, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(avatarImage, 18, 756, 68, 68);
-            ctx.restore();
-        }
-
-        const title = $("title").value.trim() || "Your video title";
-        const channel = $("channel").value.trim() || "Channel name";
-        const views = $("views").value.trim() || "Views · upload date";
-
-        ctx.fillStyle = "#f1f1f1";
-        ctx.font = "600 34px Arial";
-        wrapText(ctx, title, 112, 772, 1080, 43, 2);
-
-        ctx.fillStyle = "#aaa";
-        ctx.font = "24px Arial";
-        ctx.fillText(channel, 112, 858);
-        ctx.fillText(views, 112, 895);
-
-        ctx.fillStyle = "#ddd";
-        ctx.font = "36px Arial";
-        ctx.fillText("⋮", 1220, 780);
-
-        const link = document.createElement("a");
-        link.download = "youtube-listing.png";
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-
-        $("status").textContent = "Image downloaded.";
-    } catch {
-        $("status").textContent =
-            "Couldn't export. Try uploading the thumbnail image directly.";
-    }
-});
-
-refresh();
+  draw();
+  if (document.fonts && document.fonts.load) {
+    Promise.all([document.fonts.load('700 24px Roboto'), document.fonts.load('400 18px Roboto'), document.fonts.load('500 15px Roboto')]).then(draw, draw);
+  }
+})();

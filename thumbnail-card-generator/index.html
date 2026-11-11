@@ -1,68 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Listing Generator</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video card maker</title>
+  <meta name="description" content="Make a thumbnail, title and uploader card for any YouTube video.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main>
-        <header>
-            <h1>YouTube Listing Generator</h1>
-            <p>Generate a YouTube-style video listing.</p>
-        </header>
+<main>
+  <h1>Video card maker</h1>
+  <p class="sub">Paste a YouTube link. The thumbnail, title and uploader fill in automatically.</p>
 
-        <section class="workspace">
-            <div class="controls">
-                <label for="videoUrl">YouTube URL</label>
-                <div class="url-row">
-                    <input id="videoUrl" type="url" placeholder="Paste a YouTube link">
-                    <button id="loadVideo">Load</button>
-                </div>
+  <section class="panel" aria-label="Card details">
+    <label>YouTube link
+      <input type="text" id="link" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" autofocus>
+    </label>
+    <p class="hint" id="fetchStatus" role="status">Waiting for a link.</p>
 
-                <label for="thumbnailUpload">Custom thumbnail</label>
-                <input id="thumbnailUpload" type="file" accept="image/*">
+    <label>Title
+      <input type="text" id="title" value="The video title goes here, up to two lines" maxlength="140">
+    </label>
+    <label>Uploader
+      <input type="text" id="channel" value="Channel name">
+    </label>
 
-                <label for="title">Video title</label>
-                <input id="title" type="text" placeholder="Video title">
+    <div class="row">
+      <label>Card style
+        <select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Background
+        <select id="bgmode">
+          <option value="shadow">Transparent + shadow</option>
+          <option value="none">Card only</option>
+        </select>
+      </label>
+      <label>Size
+        <select id="scale">
+          <option value="2">Large (2×)</option>
+          <option value="3">Extra large (3×)</option>
+          <option value="1">Standard (1×)</option>
+        </select>
+      </label>
+    </div>
 
-                <label for="channel">Channel name</label>
-                <input id="channel" type="text" placeholder="Channel name">
+    <div class="drop" id="avDrop" tabindex="0" role="button" aria-label="Add channel avatar">
+      <span id="avText">Channel avatar (optional): click to choose an image</span>
+    </div>
+    <input type="file" id="avFile" accept="image/*" class="sr" tabindex="-1">
 
-                <label for="avatarUpload">Channel profile picture</label>
-                <input id="avatarUpload" type="file" accept="image/*">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Replace thumbnail">
+      <span id="dropText">Thumbnail not loading? Drop an image here, click to choose, or paste one.</span>
+    </div>
+    <input type="file" id="thumbFile" accept="image/*" class="sr" tabindex="-1">
+  </section>
 
-                <label for="views">Views and upload date</label>
-                <input id="views" type="text" placeholder="120K views · 2 days ago">
-
-                <button class="download" id="download">Download PNG</button>
-                <p id="status"></p>
-            </div>
-
-            <div class="preview-area">
-                <p class="preview-label">Preview</p>
-                <div class="listing">
-                    <div class="thumbnail">
-                        <img id="previewThumbnail" alt="">
-                    </div>
-
-                    <div class="details">
-                        <img id="previewAvatar" class="avatar" alt="">
-                        <div class="copy">
-                            <div id="previewTitle" class="video-title">Your video title</div>
-                            <div id="previewChannel" class="channel">Channel name</div>
-                            <div id="previewViews" class="views">Views · upload date</div>
-                        </div>
-                        <span class="more">⋮</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <canvas id="canvas" width="1280" height="920" hidden></canvas>
-    </main>
-
-    <script src="app.js"></script>
+  <section class="stage" aria-label="Preview">
+    <img id="out" alt="Preview of the video card" width="640">
+    <div class="actions">
+      <button class="primary" id="dlBtn" type="button">Download PNG</button>
+      <button id="copyBtn" type="button">Copy image</button>
+    </div>
+    <p class="status" id="status" role="status"></p>
+  </section>
+</main>
+<script src="app.js"></script>
 </body>
 </html>
